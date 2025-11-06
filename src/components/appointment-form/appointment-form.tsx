@@ -1,5 +1,6 @@
 'use client';
 
+import { createAppointment, updateAppointment } from '@/app/actions';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -10,6 +11,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { Appointment } from '@/types/appointment';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { format, setHours, setMinutes, startOfToday } from 'date-fns';
 import {
@@ -21,6 +23,7 @@ import {
   Phone,
   User,
 } from 'lucide-react';
+import { ReactNode, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { IMaskInput } from 'react-imask';
 import { toast } from 'sonner';
@@ -74,7 +77,17 @@ const appointmentFormSchema = z
 
 type AppointFormValues = z.infer<typeof appointmentFormSchema>;
 
-export const AppointmentForm = () => {
+type AppointmentFormProps = {
+  appointment?: Appointment;
+  children?: ReactNode;
+};
+
+export const AppointmentForm = ({
+  appointment,
+  children,
+}: AppointmentFormProps) => {
+  const [isOpen, setIsOpen] = useState(false);
+
   const form = useForm<AppointFormValues>({
     resolver: zodResolver(appointmentFormSchema),
     defaultValues: {
@@ -87,24 +100,45 @@ export const AppointmentForm = () => {
     },
   });
 
-  const onSubmit = (data: AppointFormValues) => {
+  const onSubmit = async (data: AppointFormValues) => {
     const [hour, minute] = data.time.split(':');
 
     const scheduleAt = new Date(data.scheduleAt);
     scheduleAt.setHours(Number(hour), Number(minute), 0, 0);
 
-    toast.success(`Agendamento criado com sucesso!`);
+    const isEdit = !!appointment?.id;
 
-    // invoca nossa SERVER ACTION
+    const result = isEdit
+      ? await updateAppointment(appointment.id, {
+          ...data,
+          scheduleAt,
+        })
+      : await createAppointment({
+          ...data,
+          scheduleAt,
+        });
 
-    console.log(data);
+    if (result?.error) {
+      toast.error(result?.error);
+
+      return;
+    }
+
+    toast.success(
+      `Agendamento ${isEdit ? 'atualizado' : 'criado'} com sucesso!`
+    );
+
+    setIsOpen(false);
+    form.reset();
   };
 
+  useEffect(() => {
+    form.reset(appointment);
+  }, [appointment, form]);
+
   return (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button variant="brand">Novo Agendamento</Button>
-      </DialogTrigger>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      {children && <DialogTrigger asChild>{children}</DialogTrigger>}
 
       <DialogContent
         variant="appointment"
